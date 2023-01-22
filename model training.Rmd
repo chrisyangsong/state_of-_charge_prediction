@@ -39,8 +39,6 @@ library(ICEbox)
 library(leaps)
 ```
 
-
-
 ```{r}
 load("xgboost.data.RData")
 ```
@@ -56,8 +54,6 @@ nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample
 ```{r}
 nrounds <- 1000
 ```
-
-
 
 ```{r}
 tune_grid <- expand.grid(
@@ -141,15 +137,10 @@ ggplot(xgb_tune2)+theme_bw()+geom_point(x=xgb_tune2$bestTune$nrounds,y=xgb_tune2
 dev.off()
 ```
 
-
-
 ```{r}
 xgb_tune2$results[which(rownames(xgb_tune2$results)==rownames(xgb_tune2$bestTune)),]
 ```
 
-
-
-min_child_weight=4
 
 ```{r}
 tune_grid3 <- expand.grid(
@@ -175,8 +166,6 @@ xgb_tune3 <- caret::train(
 tuneplot(xgb_tune3, probs = .95)
 ```
 
-
-
 ```{r}
 jpeg('colsample_bytree.jpg')
 
@@ -185,14 +174,10 @@ dev.off()
 ```
 
 
-
 ```{r}
 xgb_tune3$results[which(rownames(xgb_tune3$results)==rownames(xgb_tune3$bestTune)),]
 ```
 
-
-
-colsample_bytree=0.4 
 
 ```{r}
 tune_grid3.1 <- expand.grid(
@@ -219,7 +204,6 @@ tuneplot(xgb_tune3.1, probs = .95)
 ```
 
 
-
 ```{r}
 jpeg('subsample.jpg')
 
@@ -234,10 +218,6 @@ xgb_tune3.1$results[which(rownames(xgb_tune3.1$results)==rownames(xgb_tune3.1$be
 ```
 
 
-
-
-
-subsample=0.8
 
 ```{r}
 tune_grid4 <- expand.grid(
@@ -270,16 +250,11 @@ ggplot(xgb_tune4)+theme_bw()+geom_point(x=xgb_tune4$bestTune$nrounds,y=xgb_tune4
 #dev.off()
 ```
 
-
-
 ```{r}
 xgb_tune4$results[which(rownames(xgb_tune4$results)==rownames(xgb_tune4$bestTune)),]
 ```
 
 
-
-
-gamma=0.1
 ```{r}
 tune_grid5 <- expand.grid(
   nrounds = seq(from = 100, to = 10000, by = 100),
@@ -311,15 +286,9 @@ ggplot(xgb_tune5)+theme_bw()+geom_point(x=xgb_tune5$bestTune$nrounds,y=xgb_tune5
 dev.off()
 ```
 
-
-
 ```{r}
 xgb_tune5$results[which(rownames(xgb_tune5$results)==rownames(xgb_tune5$bestTune)),]
 ```
-
-
-
-
 
 
 ```{r}
@@ -397,14 +366,8 @@ xgb_model$resample
 ```
 
 ```{r}
-#average result of 200 folds
 xgb_model$results
 ```
-
-
-
-
-
 
 
 ```{r}
