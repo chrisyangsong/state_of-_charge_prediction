@@ -1,0 +1,440 @@
+---
+title: "xgbboost"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#save(training, testing, file = "xgboost.data.RData")
+```
+
+```{r}
+library(factoextra)
+library(fmsb)
+library(dplyr)
+library(chron)
+#library(RQuantLib)
+library(caret)
+library(randomForest)
+library(tree)
+library(caret)
+library(FactoMineR)
+library(relaimpo)
+library(svMisc)
+#library(zipcode)
+#data("zipcode")
+library(geosphere)
+library(stats)
+library(gbm)
+library(readxl)
+library(tidyverse)
+library(xgboost)
+library(caret)
+library(scales)
+set.seed(42)
+library(ICEbox)
+library(leaps)
+```
+
+
+
+```{r}
+load("xgboost.data.RData")
+```
+
+```{r}
+x_train <-xgb.DMatrix(as.matrix(as.data.frame(training %>% dplyr::select(-start.SOC.assume))))
+y_train <-training$start.SOC.assume
+x_test <-xgb.DMatrix(as.matrix(as.data.frame(testing %>% dplyr::select(-start.SOC.assume))))
+y_test <-testing$start.SOC.assume
+```
+nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample
+
+```{r}
+nrounds <- 1000
+```
+
+
+
+```{r}
+tune_grid <- expand.grid(
+  nrounds = seq(from = 50, to = nrounds, by = 50),
+  #eta = c(0.025, 0.05, 0.1, 0.3),
+  eta = 0.025,
+  max_depth = c(2, 4, 6,8,10),
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = 1
+)
+
+tune_control <- caret::trainControl(
+  method = "cv", # cross-validation
+  number = 5, # with n folds 
+  #index = createFolds(tr_treated$Id_clean), # fix the folds
+  verboseIter = FALSE, # no training log
+  allowParallel = TRUE # FALSE for reproducible results 
+)
+
+xgb_tune <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+# helper function for the plots
+tuneplot <- function(x, probs = .90) {
+  ggplot(x) +
+    coord_cartesian(ylim = c(quantile(x$results$RMSE, probs = probs), min(x$results$RMSE))) +
+    theme_bw()
+}
+
+tuneplot(xgb_tune)
+```
+
+
+```{r}
+jpeg('maxdepth.jpg')
+ggplot(xgb_tune)+theme_bw()+geom_point(x=xgb_tune$bestTune$nrounds,y=xgb_tune$results[which(rownames(xgb_tune$results)==rownames(xgb_tune$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))
+dev.off()
+```
+
+
+
+```{r}
+xgb_tune$results[which(rownames(xgb_tune$results)==rownames(xgb_tune$bestTune)),]
+```
+max_depth=8,eta=0.025
+```{r}
+tune_grid2 <- expand.grid(
+  nrounds = seq(from = 50, to = nrounds, by = 50),
+  eta = 0.025,
+  max_depth =xgb_tune$bestTune$max_depth,
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = c(1, 2, 3,4,5),
+  subsample = 1
+)
+
+xgb_tune2 <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid2,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+tuneplot(xgb_tune2)
+```
+
+```{r}
+jpeg('weight.jpg')
+
+ggplot(xgb_tune2)+theme_bw()+geom_point(x=xgb_tune2$bestTune$nrounds,y=xgb_tune2$results[which(rownames(xgb_tune2$results)==rownames(xgb_tune2$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))+coord_cartesian(ylim = c(quantile(xgb_tune2$results$RMSE, probs = 0.95), min(xgb_tune2$results$RMSE)))
+dev.off()
+```
+
+
+
+```{r}
+xgb_tune2$results[which(rownames(xgb_tune2$results)==rownames(xgb_tune2$bestTune)),]
+```
+
+
+
+min_child_weight=4
+
+```{r}
+tune_grid3 <- expand.grid(
+  nrounds = seq(from = 50, to = nrounds, by = 50),
+  eta = 0.025,
+  max_depth = xgb_tune$bestTune$max_depth,
+  gamma = 0,
+  colsample_bytree = c(0.2,0.4, 0.6, 0.8, 1.0),
+  min_child_weight = xgb_tune2$bestTune$min_child_weight,
+  subsample = 1
+  #subsample = c(0.4, 0.6, 0.8, 1.0)
+)
+
+xgb_tune3 <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid3,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+tuneplot(xgb_tune3, probs = .95)
+```
+
+
+
+```{r}
+jpeg('colsample_bytree.jpg')
+
+ggplot(xgb_tune3)+theme_bw()+geom_point(x=xgb_tune3$bestTune$nrounds,y=xgb_tune3$results[which(rownames(xgb_tune3$results)==rownames(xgb_tune3$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))+coord_cartesian(ylim = c(quantile(xgb_tune3$results$RMSE, probs = 0.95), min(xgb_tune3$results$RMSE)))
+dev.off()
+```
+
+
+
+```{r}
+xgb_tune3$results[which(rownames(xgb_tune3$results)==rownames(xgb_tune3$bestTune)),]
+```
+
+
+
+colsample_bytree=0.4 
+
+```{r}
+tune_grid3.1 <- expand.grid(
+  nrounds = seq(from = 50, to = nrounds, by = 50),
+  eta = 0.025,
+  max_depth = xgb_tune$bestTune$max_depth,
+  gamma = 0,
+  colsample_bytree = xgb_tune3$bestTune$colsample_bytree,
+  min_child_weight = xgb_tune2$bestTune$min_child_weight,
+  #subsample = 1
+  subsample = c(0.4, 0.6, 0.8, 1.0)
+)
+
+xgb_tune3.1 <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid3.1,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+tuneplot(xgb_tune3.1, probs = .95)
+```
+
+
+
+```{r}
+jpeg('subsample.jpg')
+
+ggplot(xgb_tune3.1)+theme_bw()+geom_point(x=xgb_tune3.1$bestTune$nrounds,y=xgb_tune3.1$results[which(rownames(xgb_tune3.1$results)==rownames(xgb_tune3.1$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))+coord_cartesian(ylim = c(quantile(xgb_tune3.1$results$RMSE, probs = 0.85), min(xgb_tune3.1$results$RMSE)))
+dev.off()
+```
+
+
+
+```{r}
+xgb_tune3.1$results[which(rownames(xgb_tune3.1$results)==rownames(xgb_tune3.1$bestTune)),]
+```
+
+
+
+
+
+subsample=0.8
+
+```{r}
+tune_grid4 <- expand.grid(
+  nrounds = seq(from = 50, to = nrounds, by = 50),
+  eta = 0.025,
+  max_depth = xgb_tune$bestTune$max_depth,
+  gamma = c(0,0.01, 0.02,0.03,0.04),
+  colsample_bytree = xgb_tune3$bestTune$colsample_bytree,
+  min_child_weight = xgb_tune2$bestTune$min_child_weight,
+  subsample = xgb_tune3.1$bestTune$subsample
+)
+
+xgb_tune4 <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid4,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+tuneplot(xgb_tune4)
+```
+
+
+```{r}
+#jpeg('gamma.jpg')
+
+ggplot(xgb_tune4)+theme_bw()+geom_point(x=xgb_tune4$bestTune$nrounds,y=xgb_tune4$results[which(rownames(xgb_tune4$results)==rownames(xgb_tune4$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))+coord_cartesian(ylim = c(quantile(xgb_tune4$results$RMSE, probs = 0.8), min(xgb_tune4$results$RMSE)))+theme(legend.title=element_blank())
+#dev.off()
+```
+
+
+
+```{r}
+xgb_tune4$results[which(rownames(xgb_tune4$results)==rownames(xgb_tune4$bestTune)),]
+```
+
+
+
+
+gamma=0.1
+```{r}
+tune_grid5 <- expand.grid(
+  nrounds = seq(from = 100, to = 10000, by = 100),
+  eta = c(0.005,0.010, 0.015, 0.020, 0.025),
+  max_depth = xgb_tune$bestTune$max_depth,
+  gamma = xgb_tune4$bestTune$gamma,
+  colsample_bytree = xgb_tune3$bestTune$colsample_bytree,
+  min_child_weight = xgb_tune2$bestTune$min_child_weight,
+  subsample = xgb_tune3.1$bestTune$subsample
+)
+
+xgb_tune5 <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid5,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+tuneplot(xgb_tune5)
+```
+
+
+```{r}
+jpeg('learning rate.jpg')
+
+ggplot(xgb_tune5)+theme_bw()+geom_point(x=xgb_tune5$bestTune$nrounds,y=xgb_tune5$results[which(rownames(xgb_tune5$results)==rownames(xgb_tune5$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))+scale_colour_hue("Eta")
+dev.off()
+```
+
+
+
+```{r}
+xgb_tune5$results[which(rownames(xgb_tune5$results)==rownames(xgb_tune5$bestTune)),]
+```
+
+
+
+
+
+
+```{r}
+tune_grid6 <- expand.grid(
+  nrounds = seq(from = 100, to = 10000, by = 100),
+  eta = 0.005,
+  max_depth = xgb_tune$bestTune$max_depth,
+  gamma = xgb_tune4$bestTune$gamma,
+  colsample_bytree = xgb_tune3$bestTune$colsample_bytree,
+  min_child_weight = xgb_tune2$bestTune$min_child_weight,
+  subsample = xgb_tune3.1$bestTune$subsample
+)
+
+xgb_tune6 <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = tune_control,
+  tuneGrid = tune_grid6,
+  method = "xgbTree",
+  verbose = TRUE
+)
+
+tuneplot(xgb_tune6)
+```
+
+
+```{r}
+#jpeg('nrounds.jpg')
+
+ggplot(xgb_tune6)+theme_bw()+geom_point(x=xgb_tune6$bestTune$nrounds,y=xgb_tune6$results[which(rownames(xgb_tune6$results)==rownames(xgb_tune6$bestTune)),]$RMSE,color='red', size=4)+ylab('RMSE')+theme(axis.title.x = element_text(size = 12, family = "serif", color = "black"))+ theme(axis.title.y = element_text(size = 12, family = "serif", color = "black"))+theme(legend.text=element_text(size = 10,color = "black"))+theme(legend.title=element_text(size = 12, family = "serif", color = "black"))+coord_cartesian(ylim = c(quantile(xgb_tune4$results$RMSE, probs = 0.98), min(xgb_tune4$results$RMSE)))
+#+scale_color_manual(values='green')
+#dev.off()
+```
+
+
+
+```{r}
+xgb_tune6
+```
+
+
+```{r}
+(final_grid <- expand.grid(
+  nrounds = xgb_tune5$bestTune$nrounds,
+  eta = xgb_tune5$bestTune$eta,
+  max_depth = xgb_tune5$bestTune$max_depth,
+  gamma = xgb_tune5$bestTune$gamma,
+  colsample_bytree = xgb_tune5$bestTune$colsample_bytree,
+  min_child_weight = xgb_tune5$bestTune$min_child_weight,
+  subsample = xgb_tune5$bestTune$subsample
+))
+```
+
+```{r}
+train_control.final <- caret::trainControl(
+  method = "cv",
+  number=200,
+  returnData = FALSE,  #important
+  verboseIter = FALSE, # no training log
+  allowParallel = TRUE # FALSE for reproducible results
+)
+
+
+(xgb_model <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = train_control.final,
+  tuneGrid = final_grid,
+  method = "xgbTree",
+  verbose = FALSE
+))
+```
+```{r}
+xgb_model$resample
+```
+
+```{r}
+#average result of 200 folds
+xgb_model$results
+```
+
+
+
+
+
+
+
+```{r}
+#base xgb
+grid_default <- expand.grid(
+  nrounds = 100,
+  max_depth = 6,
+  eta = 0.3,
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = 1
+)
+
+train_control.base <- caret::trainControl(
+  method = "none",
+  returnData = FALSE,  #important
+  verboseIter = FALSE, # no training log
+  allowParallel = TRUE # FALSE for reproducible results 
+)
+
+old_time <- Sys.time()
+xgb_base <- caret::train(
+  x = x_train,
+  y = y_train,
+  trControl = train_control.base,
+  tuneGrid = grid_default,
+  method = "xgbTree",
+  verbose = TRUE
+)
+new_time<-Sys.time()
+(time.xgb_base<-new_time - old_time)
+```
